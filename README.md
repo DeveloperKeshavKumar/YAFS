@@ -17,12 +17,13 @@ YAFS is a lightweight full-stack web framework that combines the reliability and
 🚧 **In Active Development** 
 
 - ✅ **Router (v0.1.0)**: Production-ready with 90%+ test coverage - [Docs](docs/ROUTER.md)
-- ⏳ **Query Builder**: MySQL query builder with prepared statements  
+- ✅ **Query Builder (v0.2.0)**: MySQL query builder with prepared statements - [Docs](docs/DATABASE.md)
 - ⏳ **React Integration**: PHP-to-React prop passing with Vite
 - ⏳ **Live Demo**: Coming soon
 
 ## Quick Example
 
+### Routing
 ```php
 <?php
 
@@ -48,6 +49,48 @@ $app->group(['prefix' => '/api'], function($app) {
 });
 
 $app->run();
+```
+
+### Database
+```php
+<?php
+
+use YAFS\Database\DB;
+
+// Configure database
+DB::addConnection([
+    'host' => 'localhost',
+    'database' => 'myapp',
+    'username' => 'root',
+    'password' => 'secret'
+]);
+
+// Fluent query builder
+$users = DB::table('users')
+    ->where('status', 'active')
+    ->where('age', '>', 18)
+    ->orderBy('created_at', 'desc')
+    ->limit(10)
+    ->get();
+
+// Insert with auto-increment ID
+$userId = DB::table('users')->insertGetId([
+    'name' => 'John Doe',
+    'email' => 'john@example.com'
+]);
+
+// Transactions
+try {
+    DB::beginTransaction();
+    
+    $orderId = DB::table('orders')->insertGetId($orderData);
+    DB::table('order_items')->insert($itemsData);
+    
+    DB::commit();
+} catch (\Exception $e) {
+    DB::rollBack();
+    throw $e;
+}
 ```
 
 ## Philosophy
@@ -79,12 +122,14 @@ $app->run();
 - 90%+ test coverage
 - Complete documentation
 
-**Phase 2 - Database (Next)**
-- MySQL query builder
-- Prepared statements
-- Connection pooling
+**Phase 2 - Database ✅ (v0.2.0 - Complete)**
+- MySQL query builder with fluent interface
+- Prepared statements (SQL injection impossible)
+- Connection pooling and multiple databases
+- Transaction support
+- 32 comprehensive tests
 
-**Phase 3 - React Integration**
+**Phase 3 - React Integration (Next)**
 - Vite setup
 - PHP-to-React props
 - Development workflow
@@ -113,6 +158,6 @@ MIT License - Use it however you want
 
 ---
 
-**Status**: Pre-alpha, v0.1.0 (Router complete)  
+**Status**: Pre-alpha, v0.2.0 (Query Builder complete)  
 **Author**: [Keshav Kumar](https://github.com/DeveloperKeshavKumar)  
 **Contact**: [LinkedIn](https://linkedin.com/in/keshav-1-kumar)
