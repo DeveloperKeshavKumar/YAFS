@@ -1,8 +1,6 @@
 <?php
 
-require_once __DIR__ . '/../src/Router/Route.php';
-require_once __DIR__ . '/../src/Testing/TestRunner.php';
-require_once __DIR__ . '/../src/Testing/Assertions.php';
+require_once __DIR__ . '/../autoload.php';
 
 use YAFS\Router\Route;
 use YAFS\Testing\TestRunner;
