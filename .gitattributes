@@ -1,0 +1,21 @@
+# ----------------------------
+# Core: Normalize line endings
+# ----------------------------
+* text=auto
+*.php     text eol=lf
+*.md      text eol=lf
+
+# ----------------------------
+# Release Packaging (git archive)
+# Only src/, autoload.php, README.md, LICENSE included
+# ----------------------------
+/tests               export-ignore
+/docs                export-ignore
+/examples            export-ignore
+/.github             export-ignore
+/.gitignore          export-ignore
+/.gitattributes      export-ignore
+/.env.example        export-ignore
+/.editorconfig       export-ignore
+/.vscode             export-ignore
+/.idea               export-ignore
