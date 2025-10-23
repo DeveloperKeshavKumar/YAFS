@@ -6,6 +6,8 @@ use YAFS\Router\Router;
 use YAFS\Router\Route;
 use YAFS\Http\Request;
 use YAFS\Http\Response;
+use YAFS\Exceptions\RouteNotFoundException;
+use YAFS\Exceptions\RouterException;
 
 /**
  * The Application class is the main entry point for YAFS.
@@ -23,10 +25,31 @@ class Application
 {
   private Router $router;
   private array $routeGroups = [];
+  private bool $debug = true; // Set to false in production
+  private $errorHandler = null;
 
   public function __construct()
   {
     $this->router = new Router();
+  }
+
+  /**
+   * Set debug mode.
+   * In debug mode, detailed error information is shown.
+   * In production, errors are logged but generic messages shown to users.
+   */
+  public function setDebug(bool $debug): void
+  {
+    $this->debug = $debug;
+  }
+
+  /**
+   * Set a custom error handler.
+   * This function will be called when an exception occurs during request handling.
+   */
+  public function setErrorHandler(callable $handler): void
+  {
+    $this->errorHandler = $handler;
   }
 
   /**
@@ -201,23 +224,30 @@ class Application
    */
   public function handle(Request $request)
   {
-    // Try to find a matching route
-    $route = $this->router->match($request);
+    try {
+      // Try to find a matching route
+      $route = $this->router->match($request);
 
-    // If no route matched, return 404
-    if ($route === null) {
-      http_response_code(404);
-      return $this->handleNotFound($request);
+      // If no route matched, return 404
+      if ($route === null) {
+        throw new RouteNotFoundException($request->getMethod(), $request->getPath());
+      }
+
+      // Build the middleware stack
+      $middleware = array_merge(
+        $this->router->getGlobalMiddleware(),
+        $route->getMiddleware()
+      );
+
+      // Execute middleware chain and handler
+      return $this->executeMiddlewareStack($middleware, $route, $request);
+    } catch (RouteNotFoundException $e) {
+      return $this->handleNotFound($request, $e);
+    } catch (RouterException $e) {
+      return $this->handleRouterException($e);
+    } catch (\Throwable $e) {
+      return $this->handleException($e);
     }
-
-    // Build the middleware stack
-    $middleware = array_merge(
-      $this->router->getGlobalMiddleware(),
-      $route->getMiddleware()
-    );
-
-    // Execute middleware chain and handler
-    return $this->executeMiddlewareStack($middleware, $route, $request);
   }
 
   /**
@@ -263,9 +293,113 @@ class Application
    * 
    * Override this method to customize 404 handling.
    */
-  protected function handleNotFound(Request $request)
+  protected function handleNotFound(Request $request, RouteNotFoundException $e)
   {
-    return "404 Not Found: {$request->getPath()}";
+    http_response_code(404);
+
+    if ($this->debug) {
+      return $this->renderDebugError(404, 'Route Not Found', [
+        'message' => $e->getMessage(),
+        'method' => $e->getMethod(),
+        'path' => $e->getPath()
+      ]);
+    }
+
+    return "404 Not Found";
+  }
+
+  /**
+   * Handle router-specific exceptions.
+   */
+  protected function handleRouterException(RouterException $e)
+  {
+    http_response_code(500);
+
+    if ($this->debug) {
+      return $this->renderDebugError(500, 'Router Error', [
+        'message' => $e->getMessage(),
+        'file' => $e->getFile(),
+        'line' => $e->getLine(),
+        'trace' => $e->getTraceAsString()
+      ]);
+    }
+
+    // Log the error in production
+    error_log("Router Exception: " . $e->getMessage());
+
+    return "500 Internal Server Error";
+  }
+
+  /**
+   * Handle general exceptions during request processing.
+   */
+  protected function handleException(\Throwable $e)
+  {
+    http_response_code(500);
+
+    // If custom error handler is set, use it
+    if ($this->errorHandler !== null) {
+      try {
+        return call_user_func($this->errorHandler, $e);
+      } catch (\Throwable $handlerException) {
+        // If error handler itself fails, fall back to default handling
+        error_log("Error handler failed: " . $handlerException->getMessage());
+      }
+    }
+
+    if ($this->debug) {
+      return $this->renderDebugError(500, 'Application Error', [
+        'type' => get_class($e),
+        'message' => $e->getMessage(),
+        'file' => $e->getFile(),
+        'line' => $e->getLine(),
+        'trace' => $e->getTraceAsString()
+      ]);
+    }
+
+    // Log the error in production
+    error_log("Application Exception: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
+
+    return "500 Internal Server Error";
+  }
+
+  /**
+   * Render a debug-friendly error page.
+   */
+  private function renderDebugError(int $code, string $title, array $details): string
+  {
+    $detailsHtml = '';
+    foreach ($details as $key => $value) {
+      $key = htmlspecialchars($key);
+      $value = htmlspecialchars($value);
+      $detailsHtml .= "<p><strong>{$key}:</strong><br><pre>{$value}</pre></p>";
+    }
+
+    return <<<HTML
+              <!DOCTYPE html>
+              <html>
+              <head>
+                  <title>{$code} - {$title}</title>
+                  <style>
+                      body { font-family: sans-serif; margin: 40px; background: #f5f5f5; }
+                      .error-container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                      h1 { color: #d32f2f; margin-top: 0; }
+                      pre { background: #f5f5f5; padding: 15px; border-radius: 4px; overflow-x: auto; }
+                      .warning { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }
+                  </style>
+              </head>
+              <body>
+                  <div class="error-container">
+                      <h1>{$code} - {$title}</h1>
+                      {$detailsHtml}
+                      <div class="warning">
+                          <strong>Debug Mode Active:</strong> This detailed error information is only shown because debug mode is enabled. 
+                          Set debug to false in production environments.
+                      </div>
+                  </div>
+              </body>
+              </html>
+      HTML;
   }
 
   /**
