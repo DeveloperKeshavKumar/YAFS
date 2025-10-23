@@ -472,5 +472,4 @@ $app->delete('/api/users/:id', ...);
 
 ---
 
-For complete API reference, see [API.md](API.md).
-For more examples, see [EXAMPLES.md](EXAMPLES.md).
+For more examples, see [ROUTER_EXAMPLES.md](ROUTER_EXAMPLES.md).

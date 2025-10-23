@@ -32,6 +32,13 @@ use YAFS\Application;
 $app = new Application();
 
 // Simple route
+<?php
+
+use YAFS\Application;
+
+$app = new Application();
+
+// Simple route
 $app->get('/users/:id', function($req, $res) {
     return $res->json(['user_id' => $req->param('id')]);
 });
@@ -98,6 +105,7 @@ try {
 1. **Security first**: Prepared statements, XSS prevention, and secure defaults
 2. **Developer experience**: Clean APIs that are intuitive and predictable
 3. **No magic**: Explicit is better than implicit
+3. **No magic**: Explicit is better than implicit
 4. **Production-ready basics**: Nail the fundamentals instead of adding every feature
 
 ## What YAFS Is NOT
@@ -139,13 +147,17 @@ try {
 - Authentication helpers
 - File uploads
 - Deployment guide
+- File uploads
+- Deployment guide
 
 ## Why I'm Building This
 
 I'm a recent graduate actively looking for opportunities. After facing rejections, I decided to build something that demonstrates my understanding of web application architecture, security, and modern development practices.
+I'm a recent graduate actively looking for opportunities. After facing rejections, I decided to build something that demonstrates my understanding of web application architecture, security, and modern development practices.
 
 YAFS is both a learning project and a practical tool. I'm building it to show my thought process, technical decisions, and ability to ship working software.
 
+If this project helps even one other developer, it's a success.
 If this project helps even one other developer, it's a success.
 
 ## Contributing
