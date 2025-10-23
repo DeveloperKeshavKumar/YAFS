@@ -16,36 +16,45 @@ YAFS is a lightweight full-stack web framework that combines the reliability and
 
 🚧 **In Active Development** 
 
-YAFS is being built component-by-component with a focus on quality over features:
-
-- ✅ **Router**: Express-style routing with middleware support
-- ⏳ **Query Builder**: Secure MySQL query builder with prepared statements  
-- ⏳ **React Integration**: Seamless PHP-to-React prop passing with Vite
-- ⏳ **Documentation & Demo**: Live examples and deployment guide
+- ✅ **Router (v0.1.0)**: Production-ready with 90%+ test coverage - [Docs](docs/ROUTER.md)
+- ⏳ **Query Builder**: MySQL query builder with prepared statements  
+- ⏳ **React Integration**: PHP-to-React prop passing with Vite
+- ⏳ **Live Demo**: Coming soon
 
 ## Quick Example
-```php
-// Define routes with Express.js-style syntax
-$app = new YAFS\Application();
 
+```php
+<?php
+
+use YAFS\Application;
+
+$app = new Application();
+
+// Simple route
 $app->get('/users/:id', function($req, $res) {
-    $user = DB::table('users')
-        ->where('id', $req->params['id'])
-        ->first();
-    
-    return $res->json($user);
+    return $res->json(['user_id' => $req->param('id')]);
 });
 
-$app->listen(3000);
+// With middleware
+$app->post('/posts', [$authMiddleware], function($req, $res) {
+    return $res->status(201)->json(['created' => true]);
+});
+
+// Route groups
+$app->group(['prefix' => '/api'], function($app) {
+    $app->get('/status', function($req, $res) {
+        return $res->json(['status' => 'online']);
+    });
+});
+
+$app->run();
 ```
 
 ## Philosophy
 
-YAFS follows these principles:
-
 1. **Security first**: Prepared statements, XSS prevention, and secure defaults
 2. **Developer experience**: Clean APIs that are intuitive and predictable
-3. **No magic**: Explicit is better than implicit. You should understand what your code does
+3. **No magic**: Explicit is better than implicit
 4. **Production-ready basics**: Nail the fundamentals instead of adding every feature
 
 ## What YAFS Is NOT
@@ -63,31 +72,36 @@ YAFS follows these principles:
 
 ## Roadmap
 
-**v0.1 (Current Focus)**
-- Core routing system with middleware
-- MySQL query builder with security focus
-- React integration via Vite
-- Basic documentation and examples
+**Phase 1 - Router ✅ (v0.1.0 - Complete)**
+- Express-style routing with all HTTP methods
+- Route parameters and groups
+- Middleware support
+- 90%+ test coverage
+- Complete documentation
 
-**v0.2 (Future)**
+**Phase 2 - Database (Next)**
+- MySQL query builder
+- Prepared statements
+- Connection pooling
+
+**Phase 3 - React Integration**
+- Vite setup
+- PHP-to-React props
+- Development workflow
+
+**v1.0 Goal**
+- Battle-tested in production
 - Authentication helpers
-- File upload handling
-- Enhanced error pages
-- Performance optimizations
-
-**v1.0 (Goal)**
-- Battle-tested in production apps
-- Comprehensive documentation
-- Deployment tooling
-- Community plugin ecosystem
+- File uploads
+- Deployment guide
 
 ## Why I'm Building This
 
-I'm a recent graduate actively looking for opportunitites. After getting a ton of rejections, I decided to build something that demonstrates my understanding of web application architecture, security, and modern development practices.
+I'm a recent graduate actively looking for opportunities. After facing rejections, I decided to build something that demonstrates my understanding of web application architecture, security, and modern development practices.
 
 YAFS is both a learning project and a practical tool. I'm building it to show my thought process, technical decisions, and ability to ship working software.
 
-If this project helps even one other developer build their application more easily, it's a success.
+If this project helps even one other developer, it's a success.
 
 ## Contributing
 
@@ -99,6 +113,6 @@ MIT License - Use it however you want
 
 ---
 
-**Status**: Pre-alpha, under active development  
+**Status**: Pre-alpha, v0.1.0 (Router complete)  
 **Author**: [Keshav Kumar](https://github.com/DeveloperKeshavKumar)  
 **Contact**: [LinkedIn](https://linkedin.com/in/keshav-1-kumar)
