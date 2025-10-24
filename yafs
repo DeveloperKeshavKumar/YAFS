@@ -1,0 +1,1052 @@
+#!/usr/bin/env php
+<?php
+/**
+ * YAFS CLI - Project Scaffolding Tool v1.0.0
+ * 
+ * Downloads YAFS framework from GitHub releases and scaffolds projects
+ * 
+ * Usage:
+ *   php yafs init              # Interactive setup
+ *   php yafs init api          # API-only mode
+ *   php yafs init templates    # Templates mode
+ *   php yafs init react        # Full-stack with React
+ *   php yafs add react         # Add React to existing project
+ *   php yafs remove react      # Remove React
+ * 
+ * Installation:
+ *   curl -O https://raw.githubusercontent.com/DeveloperKeshavKumar/YAFS/main/yafs
+ *   chmod +x yafs
+ *   ./yafs init
+ */
+
+class YafsCLI
+{
+    private const VERSION = '1.0.0';
+    private const GITHUB_REPO = 'DeveloperKeshavKumar/YAFS';
+    private const DEFAULT_TAG = 'v0.3.0';
+    
+    private $tempDir;
+    
+    public function __construct()
+    {
+        $this->tempDir = sys_get_temp_dir() . '/yafs-' . uniqid();
+    }
+    
+    public function run($argv)
+    {
+        // Check required extensions
+        if (!extension_loaded('curl')) {
+            $this->error("cURL extension is required. Install it first. Update php.ini if needed.");
+        }
+        if (!extension_loaded('zip')) {
+            $this->error("ZIP extension is required. Install it first. Update php.ini if needed.");
+        }
+        
+        $command = $argv[1] ?? 'help';
+        $subcommand = $argv[2] ?? null;
+        
+        switch ($command) {
+            case 'init':
+                $this->init($subcommand);
+                break;
+            case 'add':
+                $this->add($subcommand);
+                break;
+            case 'remove':
+                $this->remove($subcommand);
+                break;
+            case 'version':
+                $this->version();
+                break;
+            default:
+                $this->help();
+        }
+    }
+    
+    private function downloadFramework(string $tag = self::DEFAULT_TAG): string
+    {
+        $this->info("Downloading YAFS framework ({$tag})...");
+        
+        // Create temp directory
+        if (!mkdir($this->tempDir, 0755, true)) {
+            $this->error("Failed to create temp directory");
+        }
+        
+        // Download URL
+        $url = "https://github.com/" . self::GITHUB_REPO . "/archive/refs/tags/{$tag}.zip";
+        $zipFile = $this->tempDir . '/yafs.zip';
+        
+        // Download file
+        $this->info("Fetching from GitHub...");
+        $fp = fopen($zipFile, 'w+');
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_FILE, $fp);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 300);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        
+        if (!curl_exec($ch)) {
+            $error = curl_error($ch);
+            curl_close($ch);
+            fclose($fp);
+            $this->cleanup();
+            $this->error("Download failed: {$error}");
+        }
+        
+        curl_close($ch);
+        fclose($fp);
+        
+        // Extract
+        $this->info("Extracting files...");
+        $zip = new ZipArchive();
+        if ($zip->open($zipFile) !== true) {
+            $this->cleanup();
+            $this->error("Failed to extract ZIP file");
+        }
+        
+        $extractPath = $this->tempDir . '/extracted';
+        $zip->extractTo($extractPath);
+        $zip->close();
+        
+        // Find extracted directory (usually YAFS-version)
+        $dirs = glob($extractPath . '/YAFS-*');
+        if (empty($dirs)) {
+            $this->cleanup();
+            $this->error("Extracted directory not found");
+        }
+        
+        $frameworkPath = $dirs[0];
+        $this->success("Framework downloaded successfully!");
+        
+        return $frameworkPath;
+    }
+    
+    private function copyFrameworkFiles(string $frameworkPath, string $destPath)
+    {
+        $this->info("Setting up YAFS framework...");
+        
+        // Copy core files
+        $this->copyFile($frameworkPath . '/autoload.php', $destPath . '/autoload.php');
+        $this->copyFile($frameworkPath . '/server.php', $destPath . '/server.php');
+        $this->copyFile($frameworkPath . '/router.php', $destPath . '/router.php');
+        
+        // Copy src directory (includes Database, Testing, etc.)
+        if (is_dir($frameworkPath . '/src')) {
+            $this->copyDirectory($frameworkPath . '/src', $destPath . '/src');
+            $this->success("Framework core copied!");
+        } else {
+            $this->error("Framework src/ directory not found");
+        }
+    }
+    
+    private function copyFile($source, $dest)
+    {
+        if (!file_exists($source)) {
+            $this->warn("File not found: $source (skipping)");
+            return;
+        }
+        
+        $dir = dirname($dest);
+        if (!file_exists($dir)) {
+            mkdir($dir, 0755, true);
+        }
+        
+        copy($source, $dest);
+    }
+    
+    private function copyDirectory($source, $dest)
+    {
+        if (!file_exists($dest)) {
+            mkdir($dest, 0755, true);
+        }
+        
+        $dir = opendir($source);
+        while (($file = readdir($dir)) !== false) {
+            if ($file === '.' || $file === '..') continue;
+            
+            $srcPath = $source . '/' . $file;
+            $destPath = $dest . '/' . $file;
+            
+            if (is_dir($srcPath)) {
+                $this->copyDirectory($srcPath, $destPath);
+            } else {
+                copy($srcPath, $destPath);
+            }
+        }
+        closedir($dir);
+    }
+    
+    private function cleanup()
+    {
+        if (is_dir($this->tempDir)) {
+            $this->deleteDirectory($this->tempDir);
+        }
+    }
+    
+    private function deleteDirectory($dir)
+    {
+        if (!file_exists($dir)) return;
+        
+        $files = array_diff(scandir($dir), ['.', '..']);
+        foreach ($files as $file) {
+            $path = $dir . '/' . $file;
+            is_dir($path) ? $this->deleteDirectory($path) : unlink($path);
+        }
+        rmdir($dir);
+    }
+    
+    private function init($mode)
+    {
+        $this->banner();
+        
+        // Get project name
+        echo "\033[33m?\033[0m Project name: ";
+        $projectName = trim(fgets(STDIN));
+        
+        if (empty($projectName)) {
+            $this->error("Project name cannot be empty!");
+        }
+        
+        if (!preg_match('/^[a-z0-9_-]+$/i', $projectName)) {
+            $this->error("Project name can only contain letters, numbers, dashes and underscores");
+        }
+        
+        if (file_exists($projectName)) {
+            $this->error("Directory '$projectName' already exists!");
+        }
+        
+        // Get mode
+        if ($mode === null) {
+            $mode = $this->prompt(
+                "Choose project type:\n  1) API Only (REST API, no views)\n  2) Templates (PHP views)\n  3) Full-Stack (PHP + React)\nChoice",
+                ['1', '2', '3']
+            );
+            $mode = match ($mode) {
+                '1' => 'api',
+                '2' => 'templates',
+                '3' => 'react',
+            };
+        }
+        
+        // Create project directory
+        $this->info("\nCreating project: $projectName");
+        mkdir($projectName, 0755, true);
+        $projectPath = realpath($projectName);
+        $this->success("Created directory: $projectName/\n");
+        
+        // Download framework
+        $frameworkPath = $this->downloadFramework();
+        
+        // Copy framework files
+        $this->copyFrameworkFiles($frameworkPath, $projectPath);
+        
+        // Change to project directory
+        chdir($projectPath);
+        
+        // Initialize based on mode
+        if ($mode === 'api') {
+            $this->initAPI();
+        } elseif ($mode === 'templates') {
+            $this->initTemplates();
+        } elseif ($mode === 'react') {
+            $this->initReact();
+        }
+        
+        // Cleanup temp files
+        $this->cleanup();
+        
+        // Show instructions
+        $this->showFinalInstructions($projectName, $mode);
+    }
+    
+    private function initAPI()
+    {
+        $this->info("\nInitializing API-only mode...");
+        
+        $dirs = ['routes', 'public'];
+        foreach ($dirs as $dir) {
+            if (!file_exists($dir)) {
+                mkdir($dir, 0755, true);
+                $this->success("Created: $dir");
+            }
+        }
+        
+        $this->createFile('routes/api.php', $this->getAPIRoutesStub());
+        $this->createFile('public/index.php', $this->getPublicIndexStub());
+        $this->createFile('.gitignore', $this->getGitignoreStub());
+        $this->createFile('README.md', $this->getReadmeStub());
+        
+        $this->success("\n✓ API mode initialized!");
+    }
+    
+    private function initTemplates()
+    {
+        $this->info("\nInitializing Templates mode...");
+        
+        $dirs = ['views', 'views/layouts', 'views/components', 'public/assets/css', 'public/assets/js', 'routes'];
+        foreach ($dirs as $dir) {
+            if (!file_exists($dir)) {
+                mkdir($dir, 0755, true);
+                $this->success("Created: $dir");
+            }
+        }
+        
+        $this->createFile('routes/web.php', $this->getTemplateRoutesStub());
+        $this->createFile('views/welcome.php', $this->getWelcomeViewStub());
+        $this->createFile('views/layouts/app.php', $this->getLayoutStub());
+        $this->createFile('public/index.php', $this->getPublicIndexStub());
+        $this->createFile('.gitignore', $this->getGitignoreStub());
+        $this->createFile('README.md', $this->getReadmeStub());
+        
+        $this->success("\n✓ Templates mode initialized!");
+    }
+    
+    private function initReact()
+    {
+        $this->info("\nInitializing Full-Stack mode...");
+        
+        $dirs = ['routes', 'views', 'public/assets'];
+        foreach ($dirs as $dir) {
+            if (!file_exists($dir)) {
+                mkdir($dir, 0755, true);
+                $this->success("Created: $dir");
+            }
+        }
+        
+        $this->createFile('routes/web.php', $this->getReactRoutesStub());
+        $this->createFile('public/index.php', $this->getPublicIndexStub());
+        $this->createFile('.gitignore', $this->getGitignoreStub());
+        $this->createFile('README.md', $this->getReadmeStub());
+        
+        $this->info("\nAdding React frontend...");
+        $this->addReact(false);
+    }
+    
+    private function add($what)
+    {
+        if ($what === 'react') {
+            $this->banner();
+            $this->info("Adding React to existing project...\n");
+            $this->addReact();
+        } else {
+            $this->error("Invalid option. Use: php yafs add react");
+        }
+    }
+    
+    private function addReact($showBanner = true)
+    {
+        if ($showBanner) $this->banner();
+        
+        if (file_exists('frontend/package.json')) {
+            $this->warn("React already configured!");
+            if (!$this->confirm("Reinitialize?")) exit(0);
+        }
+        
+        $this->info("Creating frontend structure...");
+        $dirs = ['frontend', 'frontend/src', 'frontend/src/components', 'frontend/public'];
+        foreach ($dirs as $dir) {
+            if (!file_exists($dir)) {
+                mkdir($dir, 0755, true);
+                $this->success("Created: $dir");
+            }
+        }
+        
+        $this->info("\nCreating React files...");
+        $this->createFile('frontend/package.json', $this->getPackageJsonStub());
+        $this->createFile('frontend/vite.config.js', $this->getViteConfigStub());
+        $this->createFile('frontend/index.html', $this->getIndexHtmlStub());
+        $this->createFile('frontend/src/main.jsx', $this->getMainJsxStub());
+        $this->createFile('frontend/src/App.jsx', $this->getAppJsxStub());
+        $this->createFile('frontend/src/App.css', $this->getAppCssStub());
+        $this->createFile('frontend/src/index.css', $this->getIndexCssStub());
+        $this->createFile('frontend/src/components/Counter.jsx', $this->getCounterStub());
+        $this->createFile('views/react.php', $this->getReactViewStub());
+        
+        $this->addReactRoute();
+        
+        $this->info("\nInstalling dependencies...");
+        $this->info("This may take a few minutes...");
+        chdir('frontend');
+        passthru('npm install');
+        chdir('..');
+        
+        $this->success("\n✓ React added successfully!\n");
+        $this->info("Next steps:");
+        echo "  1. Start server: php server.php\n";
+        echo "  2. Visit: http://localhost:8000\n";
+    }
+    
+    private function addReactRoute()
+    {
+        $webRoutes = 'routes/web.php';
+        if (!file_exists($webRoutes)) {
+            $this->warn("routes/web.php not found. Skipping route addition.");
+            return;
+        }
+        
+        $content = file_get_contents($webRoutes);
+        if (strpos($content, "->view('react'") !== false) {
+            $this->info("React route already exists in web.php");
+            return;
+        }
+        
+        $reactRoute = <<<'PHP'
+
+// React App Route
+$app->get('/', function($req, $res) {
+    return $res->view('react', [
+        'title' => 'React App',
+        'props' => [
+            'title' => 'YAFS React App',
+            'message' => 'Full-stack PHP + React!'
+        ]
+    ]);
+});
+
+PHP;
+        
+        $lines = explode("\n", $content);
+        $lastLine = array_pop($lines);
+        $lines[] = $reactRoute;
+        $lines[] = $lastLine;
+        file_put_contents($webRoutes, implode("\n", $lines));
+        $this->success("Added React route to routes/web.php");
+    }
+    
+    private function remove($what)
+    {
+        if ($what === 'react') {
+            $this->banner();
+            $this->warn("Removing React from project...\n");
+            if (!file_exists('frontend')) $this->error("No React installation found!");
+            if (!$this->confirm("This will delete the frontend/ directory. Continue?")) exit(0);
+            $this->deleteDirectory('frontend');
+            if (file_exists('views/react.php')) unlink('views/react.php');
+            $this->success("\n✓ React removed.");
+        } else {
+            $this->error("Invalid option. Use: php yafs remove react");
+        }
+    }
+    
+    private function version()
+    {
+        echo "YAFS CLI v" . self::VERSION . "\n";
+        echo "Framework: " . self::DEFAULT_TAG . "\n";
+        echo "GitHub: https://github.com/" . self::GITHUB_REPO . "\n";
+    }
+    
+    private function help()
+    {
+        $this->banner();
+        echo "Create modern PHP applications with React integration\n\n";
+        echo "Usage:\n";
+        echo "  php yafs init              Interactive setup\n";
+        echo "  php yafs init api          API-only mode\n";
+        echo "  php yafs init templates    Templates-only mode\n";
+        echo "  php yafs init react        Full-stack with React\n";
+        echo "  php yafs add react         Add React to existing project\n";
+        echo "  php yafs remove react      Remove React\n";
+        echo "  php yafs version           Show version\n";
+        echo "  php yafs help              Show this help\n\n";
+        echo "Installation:\n";
+        echo "  curl -O https://raw.githubusercontent.com/DeveloperKeshavKumar/YAFS/main/yafs\n";
+        echo "  chmod +x yafs\n";
+        echo "  ./yafs init\n\n";
+    }
+    
+    private function showFinalInstructions($projectName, $mode)
+    {
+        $this->info("\n" . str_repeat("=", 50));
+        $this->success("\n🎉 Project '$projectName' created successfully!\n");
+        $this->info("Mode: " . ucfirst($mode));
+        $this->info("✓ Database query builder included");
+        $this->info("✓ Testing framework included");
+        $this->info("✓ All framework features enabled");
+        
+        echo "\n";
+        $this->info("Next steps:\n");
+        echo "  1. cd $projectName\n";
+        echo "  2. php server.php\n";
+        
+        if ($mode === 'react') {
+            echo "  3. Visit http://localhost:8000 (React)\n";
+            echo "  4. API: http://localhost:8000/api/*\n";
+        } elseif ($mode === 'api') {
+            echo "  3. Visit http://localhost:8000/api/hello\n";
+        } else {
+            echo "  3. Visit http://localhost:8000\n";
+        }
+        
+        echo "\n";
+        $this->info("Documentation:\n");
+        echo "  • Routes: routes/" . ($mode === 'api' ? 'api' : 'web') . ".php\n";
+        if ($mode !== 'api') echo "  • Views: views/\n";
+        if ($mode === 'templates' || $mode === 'api') echo "  • Add React: php yafs add react\n";
+        echo "  • Docs: https://github.com/DeveloperKeshavKumar/YAFS/tree/main/docs\n";
+        echo "\nHappy coding! 🚀\n\n";
+    }
+    
+    private function banner()
+    {
+        echo "\n╔══════════════════════════════════════╗\n";
+        echo "║       YAFS CLI v" . self::VERSION . "                ║\n";
+        echo "╚══════════════════════════════════════╝\n\n";
+    }
+    
+    private function info($msg) { echo "\033[36m[INFO]\033[0m $msg\n"; }
+    private function success($msg) { echo "\033[32m[✓]\033[0m $msg\n"; }
+    private function error($msg) { echo "\033[31m[✗]\033[0m $msg\n"; exit(1); }
+    private function warn($msg) { echo "\033[33m[!]\033[0m $msg\n"; }
+    
+    private function prompt($question, $allowed = [])
+    {
+        echo "\033[33m?\033[0m $question: ";
+        $answer = trim(fgets(STDIN));
+        if (!empty($allowed) && !in_array($answer, $allowed)) $this->error("Invalid choice");
+        return $answer;
+    }
+    
+    private function confirm($question)
+    {
+        $answer = $this->prompt("$question (y/n)", ['y', 'n', 'Y', 'N']);
+        return strtolower($answer) === 'y';
+    }
+    
+    private function createFile($path, $content)
+    {
+        $dir = dirname($path);
+        if (!file_exists($dir)) mkdir($dir, 0755, true);
+        file_put_contents($path, $content);
+        $this->success("Created: $path");
+    }
+    
+    // File generation stubs
+    
+    private function getPublicIndexStub()
+    {
+        return <<<'PHP'
+<?php
+/**
+ * YAFS Application Entry Point
+ */
+
+require_once __DIR__ . '/../autoload.php';
+
+use YAFS\Application;
+use YAFS\View\View;
+use YAFS\View\AssetManager;
+
+// Set view paths
+View::setViewsPath(__DIR__ . '/../views');
+AssetManager::setMode('production');
+
+// Create application instance
+$app = new Application();
+
+// Load routes
+if (file_exists(__DIR__ . '/../routes/web.php')) {
+    require_once __DIR__ . '/../routes/web.php';
+}
+
+if (file_exists(__DIR__ . '/../routes/api.php')) {
+    require_once __DIR__ . '/../routes/api.php';
+}
+
+// Run the application
+$app->run();
+
+PHP;
+    }
+    
+    private function getAPIRoutesStub()
+    {
+        return <<<'PHP'
+<?php
+/**
+ * API Routes
+ */
+
+// Health check
+$app->get('/api/health', function($req, $res) {
+    return $res->json(['status' => 'ok', 'timestamp' => time()]);
+});
+
+// Hello API
+$app->get('/api/hello', function($req, $res) {
+    return $res->json(['message' => 'Hello from YAFS API!']);
+});
+
+// Example CRUD routes
+$app->group(['prefix' => '/api'], function($app) {
+    $app->get('/items', function($req, $res) {
+        return $res->json(['items' => []]);
+    });
+    
+    $app->get('/items/:id', function($req, $res) {
+        $id = $req->param('id');
+        return $res->json(['id' => $id, 'name' => 'Item ' . $id]);
+    });
+    
+    $app->post('/items', function($req, $res) {
+        $data = $req->json();
+        return $res->status(201)->json(['id' => rand(1, 1000), 'data' => $data]);
+    });
+});
+
+PHP;
+    }
+    
+    private function getTemplateRoutesStub()
+    {
+        return <<<'PHP'
+<?php
+/**
+ * Web Routes
+ */
+
+use YAFS\View\View;
+
+View::share('app_name', 'YAFS');
+
+$app->get('/', function($req, $res) {
+    return $res->view('welcome', ['title' => 'Welcome to YAFS']);
+});
+
+$app->get('/about', function($req, $res) {
+    return $res->view('welcome', [
+        'title' => 'About YAFS',
+        'message' => 'A lightweight PHP framework'
+    ]);
+});
+
+$app->group(['prefix' => '/api'], function($app) {
+    $app->get('/hello', function($req, $res) {
+        return $res->json(['message' => 'Hello from YAFS!']);
+    });
+});
+
+PHP;
+    }
+    
+    private function getReactRoutesStub()
+    {
+        return <<<'PHP'
+<?php
+/**
+ * Web Routes
+ */
+
+// React app route will be added automatically
+
+// API routes
+$app->group(['prefix' => '/api'], function($app) {
+    $app->get('/hello', function($req, $res) {
+        return $res->json(['message' => 'Hello from YAFS API!']);
+    });
+    
+    $app->get('/items', function($req, $res) {
+        return $res->json([
+            'items' => [
+                ['id' => 1, 'name' => 'Item 1'],
+                ['id' => 2, 'name' => 'Item 2'],
+                ['id' => 3, 'name' => 'Item 3']
+            ]
+        ]);
+    });
+});
+
+PHP;
+    }
+    
+    private function getWelcomeViewStub()
+    {
+        return <<<'PHP'
+<?php
+$title = $title ?? 'Welcome to YAFS';
+$message = $message ?? null;
+
+$content = <<<HTML
+<div style="max-width: 800px; margin: 0 auto; padding: 2rem; font-family: system-ui;">
+    <h1 style="color: #2563eb;">{$title}</h1>
+HTML;
+
+if ($message) {
+    $content .= <<<HTML
+    
+    <p style="background: #dbeafe; padding: 1rem; border-radius: 0.5rem; margin-top: 1rem;">
+        {$message}
+    </p>
+HTML;
+}
+
+$content .= <<<HTML
+    
+    <div style="background: #f8fafc; padding: 2rem; border-radius: 1rem; margin-top: 2rem;">
+        <h2>Getting Started</h2>
+        <ul style="line-height: 1.8;">
+            <li>Edit routes in <code style="background: #e5e7eb; padding: 0.25rem 0.5rem;">routes/web.php</code></li>
+            <li>Create views in <code style="background: #e5e7eb; padding: 0.25rem 0.5rem;">views/</code></li>
+            <li>Add React: <code style="background: #e5e7eb; padding: 0.25rem 0.5rem;">php yafs add react</code></li>
+        </ul>
+    </div>
+    
+    <div style="margin-top: 2rem; padding: 1.5rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 1rem;">
+        <h3 style="margin-top: 0;">🚀 Quick Start</h3>
+        <p>Your YAFS application is running successfully!</p>
+        <p style="font-size: 0.9rem; opacity: 0.9;">Check out <code>routes/web.php</code> to add more routes.</p>
+    </div>
+</div>
+HTML;
+
+require __DIR__ . '/layouts/app.php';
+PHP;
+    }
+    
+    private function getLayoutStub()
+    {
+        return <<<'PHP'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?= htmlspecialchars($title ?? 'YAFS App') ?></title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f9fafb;
+            color: #1f2937;
+        }
+        code {
+            font-family: "Courier New", monospace;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <?= $content ?? '' ?>
+</body>
+</html>
+PHP;
+    }
+    
+    private function getReactViewStub()
+    {
+        return <<<'PHP'
+<?php use YAFS\View\AssetManager; ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?= htmlspecialchars($title ?? 'YAFS React App') ?></title>
+    <?= AssetManager::react('src/main.jsx') ?>
+</head>
+<body>
+    <div id="root"></div>
+    <?php if (isset($props)): ?>
+        <script>
+            window.__YAFS_PROPS__ = <?= json_encode($props, JSON_HEX_TAG | JSON_HEX_AMP) ?>;
+        </script>
+    <?php endif; ?>
+</body>
+</html>
+PHP;
+    }
+    
+    private function getPackageJsonStub()
+    {
+        return json_encode([
+            'name' => 'yafs-frontend',
+            'private' => true,
+            'version' => '1.0.0',
+            'type' => 'module',
+            'scripts' => [
+                'dev' => 'vite',
+                'build' => 'vite build',
+                'preview' => 'vite preview'
+            ],
+            'dependencies' => [
+                'react' => '^19.1.1',
+                'react-dom' => '^19.1.1'
+            ],
+            'devDependencies' => [
+                '@types/react' => '^19.1.16',
+                '@types/react-dom' => '^19.1.9',
+                '@vitejs/plugin-react' => '^5.0.4',
+                'globals' => '^16.4.0',
+                'vite' => '^6.0.3'
+            ]
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    }
+    
+    private function getViteConfigStub()
+    {
+        return <<<'JS'
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  base: process.env.YAFS_ENV === 'production' ? '/assets/build/' : '/',
+  server: {
+    port: 5173,
+    host: true,
+    cors: true,
+    origin: 'http://localhost:5173',
+  },
+  build: {
+    outDir: '../public/assets/build',
+    emptyOutDir: true,
+    manifest: true,
+    rollupOptions: {
+      input: './index.html',
+    },
+  },
+})
+
+JS;
+    }
+    
+    private function getIndexHtmlStub()
+    {
+        return <<<'HTML'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YAFS React App</title>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+</html>
+HTML;
+    }
+    
+    private function getMainJsxStub()
+    {
+        return <<<'JSX'
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App'
+import './index.css'
+
+const props = window.__YAFS_PROPS__ || {}
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App {...props} />
+  </React.StrictMode>
+)
+JSX;
+    }
+    
+    private function getAppJsxStub()
+    {
+        return <<<'JSX'
+import { useState, useEffect } from 'react'
+import Counter from './components/Counter'
+import './App.css'
+
+function App({ title = 'YAFS', message = 'React + PHP' }) {
+  const [data, setData] = useState(null)
+  
+  useEffect(() => {
+    fetch('/api/hello')
+      .then(res => res.json())
+      .then(data => {
+        console.log('API Hello:', data)
+        setData(data.message)
+      })
+      .catch(err => console.error('Error:', err))
+  }, [])
+  
+  return (
+    <div className="app">
+      <h1>{title}</h1>
+      {data && <h3>{data}</h3>}
+      <p>{message}</p>
+      <Counter />
+    </div>
+  )
+}
+
+export default App
+JSX;
+    }
+    
+    private function getCounterStub()
+    {
+        return <<<'JSX'
+import { useState } from 'react'
+
+function Counter() {
+  const [count, setCount] = useState(0)
+  
+  return (
+    <div style={{ textAlign: 'center', padding: '2rem' }}>
+      <p>Count: {count}</p>
+      <button 
+        onClick={() => setCount(count + 1)}
+        style={{ 
+          padding: '0.5rem 1rem', 
+          fontSize: '1rem', 
+          cursor: 'pointer',
+          background: '#2563eb',
+          color: 'white',
+          border: 'none',
+          borderRadius: '0.5rem'
+        }}
+      >
+        Increment
+      </button>
+    </div>
+  )
+}
+
+export default Counter
+JSX;
+    }
+    
+    private function getAppCssStub()
+    {
+        return <<<'CSS'
+.app {
+  text-align: center;
+  padding: 2rem;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.app h1 {
+  color: #2563eb;
+  margin-bottom: 1rem;
+}
+
+.app p {
+  color: #6b7280;
+  font-size: 1.125rem;
+}
+CSS;
+    }
+    
+    private function getIndexCssStub()
+    {
+        return <<<'CSS'
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f9fafb;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+CSS;
+    }
+    
+    private function getGitignoreStub()
+    {
+        return <<<'TXT'
+# Dependencies
+/frontend/node_modules/
+/vendor/
+
+# Build output
+/public/assets/build/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Logs
+*.log
+/storage/logs/
+
+# Uploads
+/public/uploads/*
+!/public/uploads/.gitkeep
+
+# Tests
+/coverage/
+TXT;
+    }
+    
+    private function getReadmeStub()
+    {
+        $projectName = basename(getcwd());
+        return <<<MD
+# {$projectName}
+
+A YAFS application.
+
+## Getting Started
+
+### Development
+
+```bash
+# Start development server
+php server.php
+
+# Visit
+http://localhost:8000
+```
+
+### Documentation
+
+- Routes: Edit `routes/web.php`
+- Views: Edit files in `views/`
+- Assets: Place in `public/assets/`
+
+### Add React
+
+```bash
+php yafs add react
+```
+
+### Production
+
+```bash
+# Build assets (if using React)
+cd frontend && npm run build
+
+# Deploy to server
+# Set public/ as document root
+```
+
+## Built with YAFS
+
+- Website: https://github.com/DeveloperKeshavKumar/YAFS
+- Documentation: https://github.com/DeveloperKeshavKumar/YAFS/tree/main/docs
+
+MD;
+    }
+}
+
+// Run CLI
+$cli = new YafsCLI();
+$cli->run($argv);
