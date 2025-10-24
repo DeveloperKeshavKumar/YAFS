@@ -30,3 +30,33 @@ spl_autoload_register(function ($class) {
     require $file;
   }
 });
+
+// Load .env file
+$envFile = __DIR__ . '/.env';
+if (file_exists($envFile)) {
+  $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+
+  foreach ($lines as $line) {
+    $line = trim($line);
+
+    // Skip comments and empty lines
+    if (empty($line) || $line[0] === '#') {
+      continue;
+    }
+
+    // Skip if no = sign
+    if (strpos($line, '=') === false) {
+      continue;
+    }
+
+    // Parse key=value
+    [$name, $value] = explode('=', $line, 2);
+    $name = trim($name);
+    $value = trim($value, " \t\n\r\0\x0B\"'");
+
+    // Set environment variables
+    putenv("$name=$value");
+    $_ENV[$name] = $value;
+    $_SERVER[$name] = $value;
+  }
+}

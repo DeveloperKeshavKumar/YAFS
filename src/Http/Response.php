@@ -2,11 +2,13 @@
 
 namespace YAFS\Http;
 
+use YAFS\View\View;
+
 /**
- * The Response class helps handlers send HTTP responses.
+ * HTTP Response wrapper.
  * 
- * It provides convenient methods for setting status codes,
- * headers, and sending JSON or HTML responses.
+ * Provides methods for setting status codes, headers, and response body.
+ * Supports JSON, HTML, text, and view responses.
  */
 class Response
 {
@@ -15,16 +17,24 @@ class Response
     private $body = null;
 
     /**
-     * Set the HTTP status code.
+     * Set HTTP status code.
+     * 
+     * @param int $code HTTP status code
+     * @return self
      */
     public function status(int $code): self
     {
         $this->statusCode = $code;
+        http_response_code($code);
         return $this;
     }
 
     /**
-     * Set a response header.
+     * Set response header.
+     * 
+     * @param string $name Header name
+     * @param string $value Header value
+     * @return self
      */
     public function header(string $name, string $value): self
     {
@@ -33,7 +43,10 @@ class Response
     }
 
     /**
-     * Send a JSON response.
+     * Send JSON response.
+     * 
+     * @param mixed $data Data to encode as JSON
+     * @return array
      */
     public function json($data): array
     {
@@ -42,7 +55,10 @@ class Response
     }
 
     /**
-     * Send an HTML response.
+     * Send HTML response.
+     * 
+     * @param string $html HTML content
+     * @return string
      */
     public function html(string $html): string
     {
@@ -52,6 +68,9 @@ class Response
 
     /**
      * Send plain text response.
+     * 
+     * @param string $text Text content
+     * @return string
      */
     public function text(string $text): string
     {
@@ -60,12 +79,49 @@ class Response
     }
 
     /**
+     * Render a view template.
+     * 
+     * @param string $view View name (e.g., 'home' or 'users/profile')
+     * @param array $data Data to pass to view
+     * @return string Rendered HTML
+     */
+    public function view(string $view, array $data = []): string
+    {
+        $html = View::render($view, $data);
+        return $this->html($html);
+    }
+
+    /**
      * Redirect to another URL.
+     * 
+     * @param string $url Destination URL
+     * @param int $code HTTP status code (default: 302)
+     * @return void
      */
     public function redirect(string $url, int $code = 302): void
     {
         http_response_code($code);
         header("Location: $url");
         exit;
+    }
+
+    /**
+     * Get current status code.
+     * 
+     * @return int
+     */
+    public function getStatusCode(): int
+    {
+        return $this->statusCode;
+    }
+
+    /**
+     * Get all headers.
+     * 
+     * @return array
+     */
+    public function getHeaders(): array
+    {
+        return $this->headers;
     }
 }
