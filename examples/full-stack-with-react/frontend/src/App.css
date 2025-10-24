@@ -1,0 +1,15 @@
+.app {
+  text-align: center;
+  padding: 2rem;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.app h1 {
+  color: #2563eb;
+  margin-bottom: 1rem;
+}
+
+.app p {
+  color: #6b7280;
+  font-size: 1.125rem;
+}

@@ -1,0 +1,32 @@
+# Dependencies
+/frontend/node_modules/
+/vendor/
+
+# Build output
+/public/assets/build/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Logs
+*.log
+/storage/logs/
+
+# Uploads
+/public/uploads/*
+!/public/uploads/.gitkeep
+
+# Tests
+/coverage/
