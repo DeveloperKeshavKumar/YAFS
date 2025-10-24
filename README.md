@@ -18,7 +18,7 @@ YAFS is a lightweight full-stack web framework that combines the reliability and
 
 - ✅ **Router (v0.1.0)**: Production-ready with 90%+ test coverage - [Docs](docs/ROUTER.md)
 - ✅ **Query Builder (v0.2.0)**: MySQL query builder with prepared statements - [Docs](docs/DATABASE.md)
-- ✅ **React Integration (v0.3.0)**: Single-port dev server with Vite HMR - [Docs](docs/View.md)
+- ✅ **React Integration (v0.3.0)**: Single-port dev server with Vite HMR - [Docs](docs/VIEW.md)
 - ⏳ **Live Demo**: Coming soon
 
 ## Quick Start
