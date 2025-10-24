@@ -18,20 +18,26 @@ YAFS is a lightweight full-stack web framework that combines the reliability and
 
 - ✅ **Router (v0.1.0)**: Production-ready with 90%+ test coverage - [Docs](docs/ROUTER.md)
 - ✅ **Query Builder (v0.2.0)**: MySQL query builder with prepared statements - [Docs](docs/DATABASE.md)
-- ⏳ **React Integration**: PHP-to-React prop passing with Vite
+- ✅ **React Integration (v0.3.0)**: Single-port dev server with Vite HMR - [Docs](docs/View.md)
 - ⏳ **Live Demo**: Coming soon
+
+## Quick Start
+
+```bash
+# Create new project
+php yafs init react
+
+# Start development
+cd project-name
+php server.php
+
+# Visit http://localhost:8000
+```
 
 ## Quick Example
 
 ### Routing
 ```php
-<?php
-
-use YAFS\Application;
-
-$app = new Application();
-
-// Simple route
 <?php
 
 use YAFS\Application;
@@ -100,11 +106,44 @@ try {
 }
 ```
 
+### React Integration
+```php
+// routes/web.php
+$app->get('/', function($req, $res) {
+    return $res->view('react', [
+        'title' => 'My App',
+        'props' => [
+            'user' => ['name' => 'John'],
+            'apiUrl' => '/api'
+        ]
+    ]);
+});
+
+// API routes work alongside React
+$app->get('/api/hello', function($req, $res) {
+    return $res->json(['message' => 'Hello from PHP!']);
+});
+```
+
+```jsx
+// frontend/src/App.jsx
+import { useEffect } from 'react'
+
+function App({ user, apiUrl }) {
+  useEffect(() => {
+    fetch(`${apiUrl}/hello`)
+      .then(res => res.json())
+      .then(data => console.log(data))
+  }, [])
+
+  return <h1>Hello, {user.name}!</h1>
+}
+```
+
 ## Philosophy
 
 1. **Security first**: Prepared statements, XSS prevention, and secure defaults
 2. **Developer experience**: Clean APIs that are intuitive and predictable
-3. **No magic**: Explicit is better than implicit
 3. **No magic**: Explicit is better than implicit
 4. **Production-ready basics**: Nail the fundamentals instead of adding every feature
 
@@ -128,36 +167,32 @@ try {
 - Route parameters and groups
 - Middleware support
 - 90%+ test coverage
-- Complete documentation
 
 **Phase 2 - Database ✅ (v0.2.0 - Complete)**
 - MySQL query builder with fluent interface
 - Prepared statements (SQL injection impossible)
 - Connection pooling and multiple databases
 - Transaction support
-- 32 comprehensive tests
 
-**Phase 3 - React Integration (Next)**
-- Vite setup
-- PHP-to-React props
-- Development workflow
+**Phase 3 - React Integration ✅ (v0.3.0 - Complete)**
+- Single-port development (PHP + Vite on :8000)
+- Automatic Vite orchestration
+- Hot Module Replacement (HMR)
+- PHP-to-React prop passing
+- Production-ready builds
 
-**v1.0 Goal**
+**v1.0 Goal (Next)**
 - Battle-tested in production
 - Authentication helpers
-- File uploads
-- Deployment guide
 - File uploads
 - Deployment guide
 
 ## Why I'm Building This
 
 I'm a recent graduate actively looking for opportunities. After facing rejections, I decided to build something that demonstrates my understanding of web application architecture, security, and modern development practices.
-I'm a recent graduate actively looking for opportunities. After facing rejections, I decided to build something that demonstrates my understanding of web application architecture, security, and modern development practices.
 
 YAFS is both a learning project and a practical tool. I'm building it to show my thought process, technical decisions, and ability to ship working software.
 
-If this project helps even one other developer, it's a success.
 If this project helps even one other developer, it's a success.
 
 ## Contributing
@@ -170,6 +205,6 @@ MIT License - Use it however you want
 
 ---
 
-**Status**: Pre-alpha, v0.2.0 (Query Builder complete)  
+**Status**: Pre-alpha, v0.3.0 (View Layer [React+Vite] complete)  
 **Author**: [Keshav Kumar](https://github.com/DeveloperKeshavKumar)  
 **Contact**: [LinkedIn](https://linkedin.com/in/keshav-1-kumar)
